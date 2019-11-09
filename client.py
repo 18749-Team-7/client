@@ -29,14 +29,12 @@ class Client():
         self.rm_port = port
         self.client_id = client_id
 
-        print("Connecting to Replication Manager...")
+        print(GREEN + "Connecting to Replication Manager..." + RESET)
         self.connect_RM() # Connect only once
 
+        time.sleep(10)
         # Disconnect from RM
         self.disconnect_RM()
-
-
-
 
     def connect_RM(self):
         # Get a socket to connect to the server
@@ -52,12 +50,15 @@ class Client():
 
         # Create client->RM packet for informing to get replica IPs
         rm_info_msg = {}
-        rm_info_msg["M_TYPE"] = 15
+        rm_info_msg["type"] = "add_client_rm"
         rm_info_msg["client_id"] = self.client_id
         rm_info_msg = json.dumps(rm_info_msg)
 
         try:
             self.s_RM.send(rm_info_msg.encode("utf-8"))
+
+            # Initiate a client listening thread
+            # threading.Thread(target=client_service_thread, args=(conn,addr, logfile, verbose)).start()
         except:
             print(RED + "Connection closed unexpectedly with Replication Manager")
             print("Shutting down client..." + RESET)
@@ -66,7 +67,7 @@ class Client():
     def disconnect_RM(self):
         # Create client->RM packet for informing that it is disconnecting
         rm_info_msg = {}
-        rm_info_msg["M_TYPE"] = 18
+        rm_info_msg["type"] = "del_client_rm"
         rm_info_msg["client_id"] = self.client_id
         rm_info_msg = json.dumps(rm_info_msg)
 

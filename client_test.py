@@ -25,7 +25,7 @@ def get_args():
 
     # IP, PORT, Username
     parser.add_argument('-ip', '--ip', help="Replication Manager IP Address", required=True)
-    parser.add_argument('-p', '--port', help="Replication Manager Port", type=int, default=6000)
+    parser.add_argument('-p', '--port', help="Replication Manager Port", type=int, default=6666)
     parser.add_argument('-u', '--username', help="Chat user/display name (needs to be unique)", required=True) # Used as client_id
     
     # Parse the arguments

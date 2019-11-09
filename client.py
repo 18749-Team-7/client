@@ -28,6 +28,9 @@ class Client():
         self.rm_ip = ip
         self.rm_port = port
         self.client_id = client_id
+        self.replica_IPs = set()
+        self.replica_conns = []
+        self.replica_mutex = threading.Lock()
 
         print(GREEN + "Connecting to Replication Manager..." + RESET)
         self.connect_RM() # Connect only once
@@ -43,6 +46,7 @@ class Client():
         # Connect to RM
         try:
             self.s_RM.connect((self.rm_ip, self.rm_port))
+            threading.Thread(target=f, args=(self.s_RM))
         except:
             print(RED + "Connection failed with Replication Manager")
             print("Shutting down client..." + RESET)
@@ -90,12 +94,35 @@ class Client():
     def recv_rm_thread(self):
         while(True):
             try:
-                data = self.s.recv(BUF_SIZE)
-                if (len(data) != 0):
-                    rm_msg = json.loads(data.decode("utf-8"))
-                    print(rm_msg)
+                data = self.s.recv(BUF_SIZE)                    
             except:
-                pass
+                print(RED+"Connection from RM closed unexpectedly"+RESET)
+
+            rm_msg = json.loads(data.decode("utf-8"))
+
+            if rm_msg["type"] == "new_replica_IPs":
+                self.replica_mutex.acquire()
+                self.replica_IPs = rm_msg["ip_list"]
+                self.replica_mutex.release()
+
+                
+
+
+            if rm_msg["type"] == "update_replica_IPs":
+                self.replica_mutex.acquire()
+                old = set(self.replica_IPs)
+                new = set(rm_msg["ip_list"])
+
+                diff = old.difference(new)
+                self.replica_IPs = rm_msg["ip_list"]
+                self.replica_mutex.release()
+
+
+
+
+            
+
+
 
     # def tcp_client(self):
         

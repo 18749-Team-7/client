@@ -28,7 +28,7 @@ class Client():
         self.rm_ip = ip
         self.rm_port = port
         self.client_id = client_id
-        self.replica_IPs = set()
+        self.replica_IPs = []
         
 
         # Replica parameters
@@ -40,6 +40,7 @@ class Client():
         print(GREEN + "Connecting to Replication Manager..." + RESET)
         self.connect_RM() # Connect only once
 
+        # self.connect_to_replica_IPs(self.replica_IPs)
         self.setup_chat_window()
 
         # Disconnect from RM
@@ -53,7 +54,7 @@ class Client():
         try:
             self.s_RM.connect((self.rm_ip, self.rm_port))
             # Spawn the listening thread for RM
-            threading.Thread(target=self.recv_rm_thread, args=(self.s_RM))
+            threading.Thread(target=self.recv_rm_thread).start()
         except:
             print(RED + "Connection failed with Replication Manager")
             print("Shutting down client..." + RESET)
@@ -91,7 +92,6 @@ class Client():
             os._exit(1)
 
         # Close connection with RM
-        self.s_RM.close()
         print(RED + "Shutting down client..." + RESET)
 
         os._exit(1)
@@ -101,7 +101,7 @@ class Client():
     def recv_rm_thread(self):
         while(True):
             try:
-                data = self.s.recv(BUF_SIZE)                    
+                data = self.s_RM.recv(BUF_SIZE)                    
             except:
                 print(RED+"Connection from RM closed unexpectedly"+RESET)
 
@@ -141,6 +141,12 @@ class Client():
 
             ################
 
+            
+            # Spawn recv thread
+            threading.Thread(target=self.recv_replica_thread, args=(s, addr)).start()
+
+            ################
+
             # Send login packet
             msg = {}
             msg["type"] = "login"
@@ -155,11 +161,7 @@ class Client():
                 print(RED+"Connection with Replica {} closed unexpectedly".format(addr) + RESET)
                 os._exit()
 
-            ################
-
             
-            # Spawn recv thread
-            threading.Thread(target=self.recv_replica_thread, args=(s, addr))
 
 
     def recv_replica_thread(self, s, addr):
@@ -181,10 +183,10 @@ class Client():
                 return
 
             if msg["type"] == "login_success":
-                print(GREEN + "{} has successfully logged in".format(msg["username"]) + RESET)
+                print(GREEN + "{} has logged in".format(msg["username"]) + RESET)
 
             if msg["type"] == "logout_success":
-                print(GREEN + "{} has successfully logged out".format(msg["username"]) + RESET)
+                print(GREEN + "{} has logged out".format(msg["username"]) + RESET)
 
             # TODO: Duplicate detection here
             if msg["type"] == "receive_message":
@@ -205,7 +207,7 @@ class Client():
 
         data = json.dumps(msg)
 
-        if (message):
+        if (msg):
             print(UP) # Cover input() line with the chat line from the server.
 
             self.replica_socket_mutex.acquire()
@@ -230,21 +232,8 @@ class Client():
         self.input_field = tk.Entry(self.top, text=self.input_user)
         self.input_field.pack(side=tk.BOTTOM, fill=tk.X)
 
-        # Inline function
-        def send_msg(event = None):
-            message = self.input_field.get()
-            self.input_user.set('')
-
-            if (message):
-                print(UP) # Cover input() line with the chat line from the server.
-                try:
-                    s.send(message.encode(STR_ENCODING))
-                except:
-                    print(RED + "Error: Connection closed unexpectedly")
-            return "break"
-
         # Create the frame for the text field
-        self.input_field.bind("<Return>", send_msg)
+        self.input_field.bind("<Return>", self.send_msg)
 
         self.top.bind("<Escape>", self.logout_client)
 

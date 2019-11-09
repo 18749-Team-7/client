@@ -29,13 +29,19 @@ class Client():
         self.rm_port = port
         self.client_id = client_id
         self.replica_IPs = set()
-        self.replica_conns = []
+        
+
+        # Replica parameters
+        self.replica_port = 5000
         self.replica_mutex = threading.Lock()
+        self.replica_sockets = {}
+        self.replica_socket_mutex = threading.Lock()
 
         print(GREEN + "Connecting to Replication Manager..." + RESET)
         self.connect_RM() # Connect only once
 
-        time.sleep(10)
+        self.setup_chat_window()
+
         # Disconnect from RM
         self.disconnect_RM()
 
@@ -46,7 +52,8 @@ class Client():
         # Connect to RM
         try:
             self.s_RM.connect((self.rm_ip, self.rm_port))
-            threading.Thread(target=f, args=(self.s_RM))
+            # Spawn the listening thread for RM
+            threading.Thread(target=self.recv_rm_thread, args=(self.s_RM))
         except:
             print(RED + "Connection failed with Replication Manager")
             print("Shutting down client..." + RESET)
@@ -105,7 +112,7 @@ class Client():
                 self.replica_IPs = rm_msg["ip_list"]
                 self.replica_mutex.release()
 
-                
+                self.connect_to_replica_IPs(rm_msg["ip_list"])
 
 
             if rm_msg["type"] == "update_replica_IPs":
@@ -113,42 +120,105 @@ class Client():
                 old = set(self.replica_IPs)
                 new = set(rm_msg["ip_list"])
 
-                diff = old.difference(new)
+                diff_ip_list = old.difference(new)
                 self.replica_IPs = rm_msg["ip_list"]
                 self.replica_mutex.release()
 
+                self.connect_to_replica_IPs(diff_ip_list)
 
 
+
+
+    def connect_to_replica_IPs(self, ip_list):
+        for addr in ip_list:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM) 
+
+            s.connect((addr, self.replica_port))
+
+            self.replica_socket_mutex.acquire()
+            self.replica_sockets[addr] = s
+            self.replica_socket_mutex.release()
+
+            ################
+
+            # Send login packet
+            msg = {}
+            msg["type"] = "login"
+            msg["username"] = self.client_id
+
+            login_data = json.dumps(msg)
+
+            try:
+                # Send login message
+                s.send(login_data.encode("utf-8"))
+            except:
+                print(RED+"Connection with Replica {} closed unexpectedly".format(addr) + RESET)
+                os._exit()
+
+            ################
 
             
+            # Spawn recv thread
+            threading.Thread(target=self.recv_replica_thread, args=(s, addr))
 
 
+    def recv_replica_thread(self, s, addr):
+        while True:
+            try:
+                data = s.recv(1024)
+            except:
+                # TODO: check if addr still in replica_ips
+                print(RED+"Connection with Replica {} closed unexpectedly".format(addr) + RESET)
 
-    # def tcp_client(self):
-        
+            msg = json.loads(data.decode("utf-8"))
 
-        # Log in to chat server
-        login_packet = LOGIN_STR + username
-        try:
-            s.send(login_packet.encode(STR_ENCODING))
-        except:
-            print(RED + "Error: Connection closed unexpectedly")
 
-        # Spawn thread to handle printing received messages
-        threading.Thread(target=receive_thread,args=(s,)).start()
+            # Handle messages
+            ####################
+            if msg["type"] == "error":
+                print(RED + "ERROR: {}".format(msg["text"] + RESET))
+                s.close()
+                return
 
-        # Chat!
-        # Create a window for the input field for messages
-        setup_chat_window(s, ip, port, username)
+            if msg["type"] == "login_success":
+                print(GREEN + "{} has successfully logged in".format(msg["username"]) + RESET)
 
-        # Closing
-        logout_packet = LOGOUT_STR + username
-        try:
-            s.send(logout_packet.encode(STR_ENCODING))
-            s.close()
-        except: 
-            print(RED + "Error: Connection closed unexpectedly")
-        return
+            if msg["type"] == "logout_success":
+                print(GREEN + "{} has successfully logged out".format(msg["username"]) + RESET)
+
+            # TODO: Duplicate detection here
+            if msg["type"] == "receive_message":
+                username = msg["username"]
+                text = msg["text"]
+
+                print("{}: {}".format(username, text))
+            
+    def send_msg(self, event = None):
+        message = self.input_field.get()
+        self.input_user.set('')
+
+        # Create the message packet
+        msg = {}
+        msg["type"] = "send_message"
+        msg["username"] = self.client_id
+        msg["text"] = message
+
+        data = json.dumps(msg)
+
+        if (message):
+            print(UP) # Cover input() line with the chat line from the server.
+
+            self.replica_socket_mutex.acquire()
+            # Send message to every replica
+            for addr, s in self.replica_sockets.items():
+                try:
+                    s.send(data.encode("utf-8"))
+                except:
+                    print(RED + "Error: Connection closed unexpectedly from Replica {}".format(addr) + RESET)
+
+            self.replica_socket_mutex.release()
+
+        return "break"
 
     def setup_chat_window(self):
         # Create a window
@@ -156,14 +226,14 @@ class Client():
         self.top.title(self.client_id)
 
         # Create input text field
-        input_user = tk.StringVar()
-        input_field = tk.Entry(self.top, text=input_user)
-        input_field.pack(side=tk.BOTTOM, fill=tk.X)
+        self.input_user = tk.StringVar()
+        self.input_field = tk.Entry(self.top, text=self.input_user)
+        self.input_field.pack(side=tk.BOTTOM, fill=tk.X)
 
         # Inline function
         def send_msg(event = None):
-            message = input_field.get()
-            input_user.set('')
+            message = self.input_field.get()
+            self.input_user.set('')
 
             if (message):
                 print(UP) # Cover input() line with the chat line from the server.
@@ -174,12 +244,29 @@ class Client():
             return "break"
 
         # Create the frame for the text field
-        input_field.bind("<Return>", send_msg)
+        self.input_field.bind("<Return>", send_msg)
 
-        # Add an escape condition
-        def destroy(e):
-            self.top.destroy()
-        self.top.bind("<Escape>", destroy)
+        self.top.bind("<Escape>", self.logout_client)
 
         # Start the chat window
         self.top.mainloop()
+
+    def logout_client(self, event = None):
+        # Send login packet
+        msg = {}
+        msg["type"] = "logout"
+        msg["username"] = self.client_id
+
+        logout_data = json.dumps(msg)
+
+        self.replica_socket_mutex.acquire()
+        # Send message to every replica
+        for addr, s in self.replica_sockets.items():
+            try:
+                s.send(logout_data.encode("utf-8"))
+            except:
+                print(RED + "Error: Connection closed unexpectedly from Replica {}".format(addr) + RESET)
+
+        self.replica_socket_mutex.release()
+
+        self.top.destroy()

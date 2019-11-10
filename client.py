@@ -284,3 +284,31 @@ class Client():
         self.replica_socket_mutex.release()
 
         self.top.destroy()
+
+
+def get_args():
+    parser = argparse.ArgumentParser()
+
+    # IP, PORT, Username
+    parser.add_argument('-ip', '--ip', help="Replication Manager IP Address", default="NO_INPUT")
+    parser.add_argument('-p', '--port', help="Replication Manager Port", type=int, default=6666)
+    parser.add_argument('-u', '--username', help="Chat user/display name (needs to be unique)", required=True) # Used as client_id
+    
+    # Parse the arguments
+    args = parser.parse_args()
+    return args
+
+if __name__ == '__main__':
+    start_time = time.time()
+
+    # Extract Arguments from the 
+    args = get_args()
+
+    # Create Client object
+    client_obj = Client(args.ip, args.port, args.username)
+
+    # Total client up time
+    print(RESET + "\nClient up time: {} seconds".format(time.time() - start_time))
+
+    # Exit
+    os._exit(1)

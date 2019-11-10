@@ -25,10 +25,15 @@ class Client():
     """
 
     def __init__(self, ip, port, client_id, verbose=True):
-        self.rm_ip = ip
+        # self.rm_ip = ip
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        host_ip = s.getsockname()[0] 
+        self.rm_ip = host_ip
         self.rm_port = port
         self.client_id = client_id
         self.replica_IPs = []
+        self.msg_counter = 0
         
 
         # Replica parameters
@@ -40,7 +45,6 @@ class Client():
         print(GREEN + "Connecting to Replication Manager..." + RESET)
         self.connect_RM() # Connect only once
 
-        # self.connect_to_replica_IPs(self.replica_IPs)
         self.setup_chat_window()
 
         # Disconnect from RM
@@ -117,12 +121,14 @@ class Client():
 
             if rm_msg["type"] == "update_replica_IPs":
                 self.replica_mutex.acquire()
-                old = set(self.replica_IPs)
-                new = set(rm_msg["ip_list"])
-
-                diff_ip_list = old.difference(new)
+                diff_ip_list = []
+                for ip in rm_msg["ip_list"]:
+                    if ip not in self.replica_IPs:
+                        diff_ip_list.append(ip)
                 self.replica_IPs = rm_msg["ip_list"]
                 self.replica_mutex.release()
+
+                print("New list:", self.replica_IPs)
 
                 self.connect_to_replica_IPs(diff_ip_list)
 
@@ -132,6 +138,7 @@ class Client():
     def connect_to_replica_IPs(self, ip_list):
         for addr in ip_list:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM) 
+            s.settimeout(5)
 
             s.connect((addr, self.replica_port))
 
@@ -157,6 +164,7 @@ class Client():
             try:
                 # Send login message
                 s.send(login_data.encode("utf-8"))
+                self.msg_counter += 1
             except:
                 print(RED+"Connection with Replica {} closed unexpectedly".format(addr) + RESET)
                 os._exit()
@@ -168,11 +176,23 @@ class Client():
         while True:
             try:
                 data = s.recv(1024)
-            except:
+            except socket.error:
                 # TODO: check if addr still in replica_ips
-                print(RED+"Connection with Replica {} closed unexpectedly".format(addr) + RESET)
+                # print(RED+"Timeout error: Connection with Replica {} closed unexpectedly".format(addr) + RESET)
+                self.replica_mutex.acquire()
+                if addr not in self.replica_IPs:
+                    self.replica_mutex.release()
+                    print("Timeout error: Replica {} died".format(addr) + RESET)
+                    break
+
+                self.replica_mutex.release()
+            except:
+                print(RED+"Unknown Error: Connection with Replica {} closed unexpectedly".format(addr) + RESET)
+            if len(data) == 0:
+                continue
 
             msg = json.loads(data.decode("utf-8"))
+            print("R:", msg)
 
 
             # Handle messages
@@ -194,6 +214,8 @@ class Client():
                 text = msg["text"]
 
                 print("{}: {}".format(username, text))
+            
+            data = ""
             
     def send_msg(self, event = None):
         message = self.input_field.get()

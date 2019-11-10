@@ -25,10 +25,13 @@ class Client():
     """
 
     def __init__(self, ip, port, client_id, verbose=True):
-        # self.rm_ip = ip
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        host_ip = s.getsockname()[0] 
+        if ip == "NO_INPUT":
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            host_ip = s.getsockname()[0] 
+        else:
+            host_ip = ip
+
         self.rm_ip = host_ip
         self.rm_port = port
         self.client_id = client_id

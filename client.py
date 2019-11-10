@@ -114,6 +114,9 @@ class Client():
 
             rm_msg = json.loads(data.decode("utf-8"))
 
+            # Print Message received from RM
+            print(BLUE + "(RECV) -> RM:", rm_msg, RESET)
+
             if rm_msg["type"] == "new_replica_IPs":
                 self.replica_mutex.acquire()
                 self.replica_IPs = rm_msg["ip_list"]
@@ -180,8 +183,6 @@ class Client():
             try:
                 data = s.recv(1024)
             except socket.error:
-                # TODO: check if addr still in replica_ips
-                # print(RED+"Timeout error: Connection with Replica {} closed unexpectedly".format(addr) + RESET)
                 self.replica_mutex.acquire()
                 if addr not in self.replica_IPs:
                     self.replica_mutex.release()
@@ -195,7 +196,9 @@ class Client():
                 continue
 
             msg = json.loads(data.decode("utf-8"))
-            print("R:", msg)
+
+            # Print Message received by replica
+            print(BLUE +"(RECV) -> Replica ({}):".format(addr), msg, RESET)
 
 
             # Handle messages

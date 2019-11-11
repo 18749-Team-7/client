@@ -36,7 +36,8 @@ class Client():
         self.rm_port = port
         self.client_id = client_id
         self.replica_IPs = []
-        self.msg_counter = 0 # Counts how many messages have been sent
+        self.rp_msg_counter = 0 # Counts how many messages have been sent to replica
+        self.rm_msg_counter = 0
         
 
         # Replica parameters
@@ -75,6 +76,7 @@ class Client():
 
         try:
             self.s_RM.send(rm_info_msg.encode("utf-8"))
+            self.rm_msg_counter += 1
 
             # Initiate a client listening thread
             # threading.Thread(target=client_service_thread, args=(conn,addr, logfile, verbose)).start()
@@ -93,6 +95,7 @@ class Client():
         # Send packet to RM
         try:
             self.s_RM.send(rm_info_msg.encode("utf-8"))
+            self.rm_msg_counter += 1
         except:
             print(RED + "Connection closed unexpectedly with Replication Manager")
             print("Shutting down client..." + RESET)
@@ -100,7 +103,6 @@ class Client():
 
         # Close connection with RM
         print(RED + "Shutting down client..." + RESET)
-
         os._exit(1)
 
 
@@ -164,17 +166,19 @@ class Client():
             msg = {}
             msg["type"] = "login"
             msg["username"] = self.client_id
+            msg["clock"] = self.rp_msg_counter
 
             login_data = json.dumps(msg)
 
             try:
                 # Send login message
                 s.send(login_data.encode("utf-8"))
-                self.msg_counter += 1
             except:
                 print(RED+"Connection with Replica {} closed unexpectedly".format(addr) + RESET)
                 os._exit()
 
+        # First message sent
+        self.rp_msg_counter += 1
             
 
 
@@ -232,7 +236,7 @@ class Client():
         msg["type"] = "send_message"
         msg["username"] = self.client_id
         msg["text"] = message
-        msg["clock"] = self.msg_counter
+        msg["clock"] = self.rp_msg_counter
 
         data = json.dumps(msg)
 
@@ -244,10 +248,10 @@ class Client():
             for addr, s in self.replica_sockets.items():
                 try:
                     s.send(data.encode("utf-8"))
-                    self.msg_counter += 1
                 except:
                     print(RED + "Error: Connection closed unexpectedly from Replica {}".format(addr) + RESET)
 
+            self.rp_msg_counter += 1
             self.replica_socket_mutex.release()
 
         return "break"
@@ -275,6 +279,7 @@ class Client():
         msg = {}
         msg["type"] = "logout"
         msg["username"] = self.client_id
+        msg["clock"] = self.rp_msg_counter
 
         logout_data = json.dumps(msg)
 
@@ -285,9 +290,9 @@ class Client():
                 s.send(logout_data.encode("utf-8"))
             except:
                 print(RED + "Error: Connection closed unexpectedly from Replica {}".format(addr) + RESET)
-
+        self.rp_msg_counter += 1
         self.replica_socket_mutex.release()
-
+        
         self.top.destroy()
 
 

@@ -36,7 +36,7 @@ class Client():
         self.rm_port = port
         self.client_id = client_id
         self.replica_IPs = []
-        self.msg_counter = 0
+        self.msg_counter = 0 # Counts how many messages have been sent
         
 
         # Replica parameters
@@ -232,6 +232,7 @@ class Client():
         msg["type"] = "send_message"
         msg["username"] = self.client_id
         msg["text"] = message
+        msg["clock"] = self.msg_counter
 
         data = json.dumps(msg)
 
@@ -243,6 +244,7 @@ class Client():
             for addr, s in self.replica_sockets.items():
                 try:
                     s.send(data.encode("utf-8"))
+                    self.msg_counter += 1
                 except:
                     print(RED + "Error: Connection closed unexpectedly from Replica {}".format(addr) + RESET)
 

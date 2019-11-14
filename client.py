@@ -35,14 +35,12 @@ class Client():
         self.rm_ip = host_ip
         self.rm_port = port
         self.client_id = client_id
-        self.replica_IPs = []
         self.rp_msg_counter = 0 # Counts how many messages have been sent to replica
         self.rm_msg_counter = 0
         
 
         # Replica parameters
         self.replica_port = 5000
-        self.replica_mutex = threading.Lock()
         self.replica_sockets = {}
         self.replica_socket_mutex = threading.Lock()
         self.replica_msg_proc = 0
@@ -121,31 +119,15 @@ class Client():
             # Print Message received from RM
             print(YELLOW + "(RECV) -> RM:", rm_msg, RESET)
 
-            if rm_msg["type"] == "new_replica_IPs":
-                self.replica_mutex.acquire()
-                self.replica_IPs = rm_msg["ip_list"]
-                self.replica_mutex.release()
+            # Message says to add replicas
+            if rm_msg["type"] == "add_replicas":
+                self.connect_replicas(rm_msg["ip_list"])
 
-                self.connect_to_replica_IPs(rm_msg["ip_list"])
+            # MEssage says to remove replicas
+            if rm_msg["type"] == "del_replicas":
+                self.disconnect_replicas(rm_msg["ip_list"])
 
-
-            if rm_msg["type"] == "update_replica_IPs":
-                self.replica_mutex.acquire()
-                diff_ip_list = []
-                for ip in rm_msg["ip_list"]:
-                    if ip not in self.replica_IPs:
-                        diff_ip_list.append(ip)
-                self.replica_IPs = rm_msg["ip_list"]
-                self.replica_mutex.release()
-
-                print("New list:", self.replica_IPs)
-
-                self.connect_to_replica_IPs(diff_ip_list)
-
-
-
-
-    def connect_to_replica_IPs(self, ip_list):
+    def connect_replicas(self, ip_list):
         for addr in ip_list:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM) 
             s.settimeout(5)
@@ -182,20 +164,25 @@ class Client():
         # First message sent
         self.rp_msg_counter += 1
             
-
+    def disconnect_replicas(self, ip_list):
+        for addr in ip_list:
+            self.replica_socket_mutex.acquire()
+            self.replica_sockets[addr].close() # Close the socket
+            del self.replica_sockets[addr]
+            self.replica_socket_mutex.release()
 
     def recv_replica_thread(self, s, addr):
         while True:
+            # Check if replica is still in the sockets dict
+            self.replica_socket_mutex.acquire()
+            replica_is_alive = addr in self.replica_sockets
+            self.replica_socket_mutex.release()
+            if not replica_is_alive:
+                return
+
+
             try:
                 data = s.recv(1024)
-            except socket.error:
-                self.replica_mutex.acquire()
-                if addr not in self.replica_IPs:
-                    self.replica_mutex.release()
-                    print("Timeout error: Replica {} died".format(addr) + RESET)
-                    break
-
-                self.replica_mutex.release()
             except:
                 print(RED+"Unknown Error: Connection with Replica {} closed unexpectedly".format(addr) + RESET)
             if len(data) == 0:
@@ -204,7 +191,6 @@ class Client():
             msg = json.loads(data.decode("utf-8"))
 
             # Print Message received by replica
-            print(YELLOW +"(RECV) -> Replica ({}):".format(addr), msg, RESET)
 
             # Duplicate detection
             self.replica_msg_proc_mutex.acquire()
@@ -212,6 +198,7 @@ class Client():
                 print(RED + "Duplicate message detected from {}: clock = {}".format(addr, msg["clock"]) + RESET)
                 continue
             else:
+                print(YELLOW +"(RECV) -> Replica ({}):".format(addr), msg, RESET)
                 self.replica_msg_proc += 1
             self.replica_msg_proc_mutex.release()
 

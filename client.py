@@ -45,6 +45,8 @@ class Client():
         self.replica_mutex = threading.Lock()
         self.replica_sockets = {}
         self.replica_socket_mutex = threading.Lock()
+        self.replica_msg_proc = 0
+        self.replica_msg_proc_mutex = threading.Lock()
 
         print(GREEN + "Connecting to Replication Manager..." + RESET)
         self.connect_RM() # Connect only once
@@ -112,12 +114,12 @@ class Client():
             try:
                 data = self.s_RM.recv(BUF_SIZE)                    
             except:
-                print(RED+"Connection from RM closed unexpectedly"+RESET)
+                print(RED + "Connection from RM closed unexpectedly" + RESET)
 
             rm_msg = json.loads(data.decode("utf-8"))
 
             # Print Message received from RM
-            print(BLUE + "(RECV) -> RM:", rm_msg, RESET)
+            print(YELLOW + "(RECV) -> RM:", rm_msg, RESET)
 
             if rm_msg["type"] == "new_replica_IPs":
                 self.replica_mutex.acquire()
@@ -202,8 +204,16 @@ class Client():
             msg = json.loads(data.decode("utf-8"))
 
             # Print Message received by replica
-            print(BLUE +"(RECV) -> Replica ({}):".format(addr), msg, RESET)
+            print(YELLOW +"(RECV) -> Replica ({}):".format(addr), msg, RESET)
 
+            # Duplicate detection
+            self.replica_msg_proc_mutex.acquire()
+            if msg["clock"] < self.replica_msg_proc:
+                print(RED + "Duplicate message detected from {}: clock = {}".format(addr, msg["clock"]) + RESET)
+                continue
+            else:
+                self.replica_msg_proc += 1
+            self.replica_msg_proc_mutex.release()
 
             # Handle messages
             ####################
@@ -218,13 +228,12 @@ class Client():
             if msg["type"] == "logout_success":
                 print(GREEN + "{} has logged out".format(msg["username"]) + RESET)
 
-            # TODO: Duplicate detection here
             if msg["type"] == "receive_message":
                 username = msg["username"]
                 text = msg["text"]
 
                 print("{}: {}".format(username, text))
-            
+
             data = ""
             
     def send_msg(self, event = None):

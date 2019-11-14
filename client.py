@@ -5,6 +5,7 @@ import os
 import time
 import tkinter as tk
 import json
+import multiprocessing
 
 BUF_SIZE = 1024
 
@@ -37,6 +38,8 @@ class Client():
         self.client_id = client_id
         self.rp_msg_counter = 0 # Counts how many messages have been sent to replica
         self.rm_msg_counter = 0
+
+        self.queue = multiprocessing.Queue()
         
 
         # Replica parameters
@@ -48,6 +51,8 @@ class Client():
 
         print(GREEN + "Connecting to Replication Manager..." + RESET)
         self.connect_RM() # Connect only once
+
+        threading.Thread(target=self.proc_queue).start()
 
         self.setup_chat_window()
 
@@ -180,26 +185,49 @@ class Client():
             if not replica_is_alive:
                 return
 
-
             try:
                 data = s.recv(1024)
+            except socket.timeout:
+                continue
             except:
                 print(RED+"Unknown Error: Connection with Replica {} closed unexpectedly".format(addr) + RESET)
             if len(data) == 0:
                 continue
 
+            print("RECV happened")
             msg = json.loads(data.decode("utf-8"))
+            msg["ip"] = addr
+            msg["socket"] = s
+            self.queue.put(msg)
 
             # Print Message received by replica
 
-            # Duplicate detection
+            data = ""
+
+    def proc_queue(self):
+        # Duplicate detection
+        while True:
+            msg = self.queue.get()
+            print(msg)
+            addr = msg["ip"]
+            s = msg["socket"]
+
+            del msg["socket"]
+            del msg["ip"]
+
+            print(YELLOW +"(RECV) -> Replica ({}):".format(addr), msg, RESET)
+
+            # Check if its your login message, sync your clock to replicas
             self.replica_msg_proc_mutex.acquire()
-            if msg["clock"] < self.replica_msg_proc:
-                print(RED + "Duplicate message detected from {}: clock = {}".format(addr, msg["clock"]) + RESET)
-                continue
+            if (msg["type"] == "login_success") and (msg["username"] == self.client_id) and (self.replica_msg_proc == 0):
+                    self.replica_msg_proc = msg["clock"] + 1
             else:
-                print(YELLOW +"(RECV) -> Replica ({}):".format(addr), msg, RESET)
-                self.replica_msg_proc += 1
+                if msg["clock"] < self.replica_msg_proc:
+                    print(RED + "Duplicate message detected from {}: clock = {}".format(addr, msg["clock"]) + RESET)
+                    self.replica_msg_proc_mutex.release()
+                    continue
+                else:
+                    self.replica_msg_proc += 1
             self.replica_msg_proc_mutex.release()
 
             # Handle messages
@@ -220,12 +248,19 @@ class Client():
                 text = msg["text"]
 
                 print("{}: {}".format(username, text))
-
-            data = ""
             
     def send_msg(self, event = None):
         message = self.input_field.get()
         self.input_user.set('')
+
+        if message == "$count":
+            print(MAGENTA + "CLIENT -> Number of messages processed: {}".format(self.replica_msg_proc) + RESET)
+            return "break"
+        
+        if message == "$replica":
+            print(MAGENTA + "CLIENT -> Number of Replicas connected: {}".format(len(self.replica_sockets)) + RESET)
+
+
 
         # Create the message packet
         msg = {}

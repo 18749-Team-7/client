@@ -145,7 +145,6 @@ class Client():
 
             ################
 
-            
             # Spawn recv thread
             threading.Thread(target=self.recv_replica_thread, args=(s, addr)).start()
 
@@ -194,7 +193,6 @@ class Client():
             if len(data) == 0:
                 continue
 
-            print("RECV happened")
             msg = json.loads(data.decode("utf-8"))
             msg["ip"] = addr
             msg["socket"] = s
@@ -204,11 +202,27 @@ class Client():
 
             data = ""
 
+    
+    def client_msg_box_control(self, msg):
+        if msg == "$count":
+            print(MAGENTA + "CLIENT -> Number of messages processed: {}".format(self.replica_msg_proc) + RESET)
+            return "break"
+        
+        if msg == "$replica":
+            print(MAGENTA + "CLIENT -> Number of Replicas connected: {}".format(len(self.replica_sockets)) + RESET)
+
+        if msg == "$reset_count":
+            print(MAGENTA + "CLIENT -> Clearing messages processed count")
+            self.replica_msg_proc_mutex.acquire()
+            self.replica_msg_proc = 0
+            self.replica_msg_proc_mutex.release()
+            print(MAGENTA + "CLIENT -> Number of messages processed: {}".format(self.replica_msg_proc) + RESET)
+
+
     def proc_queue(self):
         # Duplicate detection
         while True:
             msg = self.queue.get()
-            print(msg)
             addr = msg["ip"]
             s = msg["socket"]
 
@@ -248,19 +262,15 @@ class Client():
                 text = msg["text"]
 
                 print("{}: {}".format(username, text))
-            
+
     def send_msg(self, event = None):
         message = self.input_field.get()
         self.input_user.set('')
-
-        if message == "$count":
-            print(MAGENTA + "CLIENT -> Number of messages processed: {}".format(self.replica_msg_proc) + RESET)
+        if message == "":
             return "break"
-        
-        if message == "$replica":
-            print(MAGENTA + "CLIENT -> Number of Replicas connected: {}".format(len(self.replica_sockets)) + RESET)
-
-
+        if (message[0] == "$"):
+            self.client_msg_box_control(message)
+            return "break"
 
         # Create the message packet
         msg = {}

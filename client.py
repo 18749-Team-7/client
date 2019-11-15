@@ -6,6 +6,7 @@ import time
 import tkinter as tk
 import json
 import multiprocessing
+import sys
 
 BUF_SIZE = 1024
 
@@ -52,12 +53,13 @@ class Client():
         print(GREEN + "Connecting to Replication Manager..." + RESET)
         self.connect_RM() # Connect only once
 
-        threading.Thread(target=self.proc_queue).start()
+        threading.Thread(target=self.proc_queue, daemon=True).start()
 
         self.setup_chat_window()
 
         # Disconnect from RM
         self.disconnect_RM()
+        return
 
     def connect_RM(self):
         # Get a socket to connect to the server
@@ -67,7 +69,7 @@ class Client():
         try:
             self.s_RM.connect((self.rm_ip, self.rm_port))
             # Spawn the listening thread for RM
-            threading.Thread(target=self.recv_rm_thread).start()
+            threading.Thread(target=self.recv_rm_thread, daemon=True).start()
         except:
             print(RED + "Connection failed with Replication Manager")
             print("Shutting down client..." + RESET)
@@ -82,9 +84,6 @@ class Client():
         try:
             self.s_RM.send(rm_info_msg.encode("utf-8"))
             self.rm_msg_counter += 1
-
-            # Initiate a client listening thread
-            # threading.Thread(target=client_service_thread, args=(conn,addr, logfile, verbose)).start()
         except:
             print(RED + "Connection closed unexpectedly with Replication Manager")
             print("Shutting down client..." + RESET)
@@ -108,18 +107,20 @@ class Client():
 
         # Close connection with RM
         print(RED + "Shutting down client..." + RESET)
-        os._exit(1)
-
 
 
     def recv_rm_thread(self):
         while(True):
             try:
-                data = self.s_RM.recv(BUF_SIZE)                    
+                data = self.s_RM.recv(BUF_SIZE)                 
             except:
                 print(RED + "Connection from RM closed unexpectedly" + RESET)
 
-            rm_msg = json.loads(data.decode("utf-8"))
+            try:
+                rm_msg = json.loads(data.decode("utf-8"))
+            except:
+                # Client has mostly shutdown
+                return
 
             # Print Message received from RM
             print(YELLOW + "(RECV) -> RM:", rm_msg, RESET)
@@ -144,7 +145,7 @@ class Client():
             ################
 
             # Spawn recv thread
-            threading.Thread(target=self.recv_replica_thread, args=(s, addr)).start()
+            threading.Thread(target=self.recv_replica_thread, args=(s, addr), daemon=True).start()
 
             ################
             if not self.is_logged_in:
@@ -181,7 +182,11 @@ class Client():
     def recv_replica_thread(self, s, addr):
         while True:
             # Check if replica is still in the sockets dict
-            replica_is_alive = addr in self.replica_sockets
+            try:
+                replica_is_alive = addr in self.replica_sockets
+            except:
+                # Client has mostly shut down
+                return
 
             if not replica_is_alive:
                 return
@@ -352,7 +357,7 @@ if __name__ == '__main__':
     client_obj = Client(args.ip, args.port, args.username)
 
     # Total client up time
-    print(RESET + "\nClient up time: {} seconds".format(time.time() - start_time))
+    print(RESET + "Client up time: {} seconds".format(time.time() - start_time))
 
     # Exit
-    os._exit(1)
+    sys.exit(1)

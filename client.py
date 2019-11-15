@@ -38,14 +38,14 @@ class Client():
         self.client_id = client_id
         self.rp_msg_counter = 0 # Counts how many messages have been sent to replica
         self.rm_msg_counter = 0
+        self.is_logged_in = False
 
         self.queue = multiprocessing.Queue()
         
 
         # Replica parameters
         self.replica_port = 5000
-        self.replica_sockets = {}
-        self.replica_socket_mutex = threading.Lock()
+        self.replica_sockets = multiprocessing.Manager().dict()
         self.replica_msg_proc = 0
         self.replica_msg_proc_mutex = threading.Lock()
 
@@ -139,9 +139,7 @@ class Client():
 
             s.connect((addr, self.replica_port))
 
-            self.replica_socket_mutex.acquire()
             self.replica_sockets[addr] = s
-            self.replica_socket_mutex.release()
 
             ################
 
@@ -149,14 +147,16 @@ class Client():
             threading.Thread(target=self.recv_replica_thread, args=(s, addr)).start()
 
             ################
+            if not self.is_logged_in:
+                # Send login packet
+                msg = {}
+                msg["type"] = "login"
+                msg["username"] = self.client_id
+                msg["clock"] = self.rp_msg_counter
 
-            # Send login packet
-            msg = {}
-            msg["type"] = "login"
-            msg["username"] = self.client_id
-            msg["clock"] = self.rp_msg_counter
+                login_data = json.dumps(msg)
 
-            login_data = json.dumps(msg)
+                self.is_logged_in = True
 
             try:
                 # Send login message
@@ -169,18 +169,20 @@ class Client():
         self.rp_msg_counter += 1
             
     def disconnect_replicas(self, ip_list):
+        # Close all socket connections in the ip_list given
         for addr in ip_list:
-            self.replica_socket_mutex.acquire()
             self.replica_sockets[addr].close() # Close the socket
             del self.replica_sockets[addr]
-            self.replica_socket_mutex.release()
+
+        # If all replicas have disconnected
+        if len(self.replica_sockets) == 0:
+            self.is_logged_in = False
 
     def recv_replica_thread(self, s, addr):
         while True:
             # Check if replica is still in the sockets dict
-            self.replica_socket_mutex.acquire()
             replica_is_alive = addr in self.replica_sockets
-            self.replica_socket_mutex.release()
+
             if not replica_is_alive:
                 return
 
@@ -213,9 +215,7 @@ class Client():
 
         if msg == "$reset_count":
             print(MAGENTA + "CLIENT -> Clearing messages processed count")
-            self.replica_msg_proc_mutex.acquire()
             self.replica_msg_proc = 0
-            self.replica_msg_proc_mutex.release()
             print(MAGENTA + "CLIENT -> Number of messages processed: {}".format(self.replica_msg_proc) + RESET)
 
 
@@ -232,17 +232,14 @@ class Client():
             print(YELLOW +"(RECV) -> Replica ({}):".format(addr), msg, RESET)
 
             # Check if its your login message, sync your clock to replicas
-            self.replica_msg_proc_mutex.acquire()
             if (msg["type"] == "login_success") and (msg["username"] == self.client_id) and (self.replica_msg_proc == 0):
                     self.replica_msg_proc = msg["clock"] + 1
             else:
                 if msg["clock"] < self.replica_msg_proc:
                     print(RED + "Duplicate message detected from {}: clock = {}".format(addr, msg["clock"]) + RESET)
-                    self.replica_msg_proc_mutex.release()
                     continue
                 else:
                     self.replica_msg_proc += 1
-            self.replica_msg_proc_mutex.release()
 
             # Handle messages
             ####################
@@ -284,7 +281,6 @@ class Client():
         if (msg):
             print(UP) # Cover input() line with the chat line from the server.
 
-            self.replica_socket_mutex.acquire()
             # Send message to every replica
             for addr, s in self.replica_sockets.items():
                 try:
@@ -293,7 +289,6 @@ class Client():
                     print(RED + "Error: Connection closed unexpectedly from Replica {}".format(addr) + RESET)
 
             self.rp_msg_counter += 1
-            self.replica_socket_mutex.release()
 
         return "break"
 
@@ -324,7 +319,6 @@ class Client():
 
         logout_data = json.dumps(msg)
 
-        self.replica_socket_mutex.acquire()
         # Send message to every replica
         for addr, s in self.replica_sockets.items():
             try:
@@ -332,7 +326,6 @@ class Client():
             except:
                 print(RED + "Error: Connection closed unexpectedly from Replica {}".format(addr) + RESET)
         self.rp_msg_counter += 1
-        self.replica_socket_mutex.release()
         
         self.top.destroy()
 

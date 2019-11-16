@@ -294,33 +294,37 @@ class Client():
         return "break"
 
     def ai_send_thread(self):
-        file_string = "Hello {}"
+        lionel_ritchie = "Hello, is it me you're looking for? Cause I wonder where you are And I wonder what you do Are you somewhere feeling lonely, or is someone loving you?"
+        lionel_ritchie = lionel_ritchie.split()
+        len_lyric = len(lionel_ritchie)
+        file_string = "{} {}"
         msg_count = 0
 
         while True:
-            # Create the message packet
-            msg = {}
-            msg["type"] = "send_message"
-            msg["username"] = self.client_id
-            msg["text"] = file_string.format(msg_count)
-            msg["clock"] = self.rp_msg_counter
+            while self.use_ai:
+                # Create the message packet
+                msg = {}
+                msg["type"] = "send_message"
+                msg["username"] = self.client_id
+                msg["text"] = file_string.format(lionel_ritchie[msg_count % len_lyric], msg_count)
+                msg["clock"] = self.rp_msg_counter
 
-            data = json.dumps(msg)
+                data = json.dumps(msg)
 
-            # Send message to every replica
-            for addr, s in self.replica_sockets.items():
-                try:
-                    s.send(data.encode("utf-8"))
-                    # print("Sent message")
-                except:
-                    print(RED + "Error: Connection closed unexpectedly from Replica {}".format(addr) + RESET)
+                # Send message to every replica
+                for addr, s in self.replica_sockets.items():
+                    try:
+                        s.send(data.encode("utf-8"))
+                        # print("Sent message")
+                    except:
+                        print(RED + "Error: Connection closed unexpectedly from Replica {}".format(addr) + RESET)
 
-            self.rp_msg_counter += 1
+                self.rp_msg_counter += 1
 
-            t = random.random()
-            time.sleep(0.5 + t * 1)
+                t = random.random()
+                time.sleep(1.5 + t)
 
-            msg_count += 1
+                msg_count += 1
 
     def setup_chat_window(self):
         # Create a window

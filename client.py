@@ -39,7 +39,6 @@ class Client():
         self.client_id = client_id
         self.rp_msg_counter = 0 # Counts how many messages have been sent to replica
         self.rm_msg_counter = 0
-        self.is_logged_in = False
 
         self.queue = multiprocessing.Queue()
         
@@ -148,16 +147,13 @@ class Client():
             threading.Thread(target=self.recv_replica_thread, args=(s, addr), daemon=True).start()
 
             ################
-            if not self.is_logged_in:
-                # Send login packet
-                msg = {}
-                msg["type"] = "login"
-                msg["username"] = self.client_id
-                msg["clock"] = self.rp_msg_counter
+            # Send login packet
+            msg = {}
+            msg["type"] = "login"
+            msg["username"] = self.client_id
+            msg["clock"] = self.rp_msg_counter
 
-                login_data = json.dumps(msg)
-
-                self.is_logged_in = True
+            login_data = json.dumps(msg)
 
             try:
                 # Send login message
@@ -174,10 +170,6 @@ class Client():
         for addr in ip_list:
             self.replica_sockets[addr].close() # Close the socket
             del self.replica_sockets[addr]
-
-        # If all replicas have disconnected
-        if len(self.replica_sockets) == 0:
-            self.is_logged_in = False
 
     def recv_replica_thread(self, s, addr):
         while True:

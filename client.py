@@ -7,6 +7,7 @@ import tkinter as tk
 import json
 import multiprocessing
 import sys
+import random
 
 BUF_SIZE = 1024
 
@@ -26,7 +27,7 @@ class Client():
     Alien Tech. for client
     """
 
-    def __init__(self, ip, port, client_id, verbose=True):
+    def __init__(self, ip, port, client_id, ai):
         if ip == "NO_INPUT":
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             s.connect(("8.8.8.8", 80))
@@ -39,6 +40,9 @@ class Client():
         self.client_id = client_id
         self.rp_msg_counter = 1 # Counts how many messages have been sent to replica
         self.rm_msg_counter = 0
+
+        # Set AI flag
+        self.use_ai = ai
 
         self.queue = multiprocessing.Queue()
         
@@ -263,6 +267,9 @@ class Client():
             self.client_msg_box_control(message)
             return "break"
 
+        if self.use_ai:
+            return "break"
+
         # Create the message packet
         msg = {}
         msg["type"] = "send_message"
@@ -286,6 +293,35 @@ class Client():
 
         return "break"
 
+    def ai_send_thread(self):
+        file_string = "Hello {}"
+        msg_count = 0
+
+        while True:
+            # Create the message packet
+            msg = {}
+            msg["type"] = "send_message"
+            msg["username"] = self.client_id
+            msg["text"] = file_string.format(msg_count)
+            msg["clock"] = self.rp_msg_counter
+
+            data = json.dumps(msg)
+
+            # Send message to every replica
+            for addr, s in self.replica_sockets.items():
+                try:
+                    s.send(data.encode("utf-8"))
+                    # print("Sent message")
+                except:
+                    print(RED + "Error: Connection closed unexpectedly from Replica {}".format(addr) + RESET)
+
+            self.rp_msg_counter += 1
+
+            t = random.random()
+            time.sleep(0.5 + t * 1)
+
+            msg_count += 1
+
     def setup_chat_window(self):
         # Create a window
         self.top = tk.Tk()
@@ -300,6 +336,9 @@ class Client():
         self.input_field.bind("<Return>", self.send_msg)
 
         self.top.bind("<Escape>", self.logout_client)
+
+        if self.use_ai:
+            threading.Thread(target=self.ai_send_thread, daemon=True).start()
 
         # Start the chat window
         self.top.mainloop()
@@ -331,6 +370,7 @@ def get_args():
     parser.add_argument('-ip', '--ip', help="Replication Manager IP Address", default="NO_INPUT")
     parser.add_argument('-p', '--port', help="Replication Manager Port", type=int, default=6666)
     parser.add_argument('-u', '--username', help="Chat user/display name (needs to be unique)", required=True) # Used as client_id
+    parser.add_argument('-ai', '--use_ai', help="Uses Alien Tech AI to send messages", action='store_true')
     
     # Parse the arguments
     args = parser.parse_args()
@@ -343,7 +383,7 @@ if __name__ == '__main__':
     args = get_args()
 
     # Create Client object
-    client_obj = Client(args.ip, args.port, args.username)
+    client_obj = Client(args.ip, args.port, args.username, args.use_ai)
 
     # Total client up time
     print(RESET + "Client up time: {} seconds".format(time.time() - start_time))

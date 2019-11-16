@@ -37,7 +37,7 @@ class Client():
         self.rm_ip = host_ip
         self.rm_port = port
         self.client_id = client_id
-        self.rp_msg_counter = 0 # Counts how many messages have been sent to replica
+        self.rp_msg_counter = 1 # Counts how many messages have been sent to replica
         self.rm_msg_counter = 0
 
         self.queue = multiprocessing.Queue()
@@ -151,7 +151,7 @@ class Client():
             msg = {}
             msg["type"] = "login"
             msg["username"] = self.client_id
-            msg["clock"] = self.rp_msg_counter
+            msg["clock"] = 0
 
             login_data = json.dumps(msg)
 
@@ -161,9 +161,6 @@ class Client():
             except:
                 print(RED+"Connection with Replica {} closed unexpectedly".format(addr) + RESET)
                 os._exit()
-
-        # First message sent
-        self.rp_msg_counter += 1
             
     def disconnect_replicas(self, ip_list):
         # Close all socket connections in the ip_list given

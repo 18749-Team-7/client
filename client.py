@@ -207,14 +207,25 @@ class Client():
         if msg == "$count":
             print(MAGENTA + "CLIENT -> Number of messages processed: {}".format(self.replica_msg_proc) + RESET)
             return "break"
+
+        if msg == "$help":
+            print(MAGENTA + "CLIENT -> Hi this is the client of {}".format(self.client_id) + RESET)
+            print(MAGENTA + "CLIENT -> $count : Gives number of messages that have been processed " + RESET)
+            print(MAGENTA + "CLIENT -> $replica : Number of replicas connected " + RESET)
+            print(MAGENTA + "CLIENT -> $reset_count : Clears the number of messages that have been processed (useful when all replicas) " + RESET)
+            return "break"
         
-        if msg == "$replica":
+        elif msg == "$replica":
             print(MAGENTA + "CLIENT -> Number of Replicas connected: {}".format(len(self.replica_sockets)) + RESET)
 
-        if msg == "$reset_count":
+        elif msg == "$reset_count":
             print(MAGENTA + "CLIENT -> Clearing messages processed count")
             self.replica_msg_proc = 0
             print(MAGENTA + "CLIENT -> Number of messages processed: {}".format(self.replica_msg_proc) + RESET)
+
+        else:
+            print(MAGENTA + "CLIENT -> Error: Not an internal command")
+        
 
 
     def proc_queue(self):
@@ -229,12 +240,17 @@ class Client():
 
             print(YELLOW +"(RECV) -> Replica ({}):".format(addr), msg, RESET)
 
+            if "clock" in msg.keys():
+                rp_clock_value = msg["clock"]
+            else:
+                rp_clock_value = msg["replica_clock"]
+
             # Check if its your login message, sync your clock to replicas
             if (msg["type"] == "login_success") and (msg["username"] == self.client_id) and (self.replica_msg_proc == 0):
-                    self.replica_msg_proc = msg["clock"] + 1
+                    self.replica_msg_proc = rp_clock_value + 1
             else:
-                if msg["clock"] < self.replica_msg_proc:
-                    print(RED + "Duplicate message detected from {}: clock = {}".format(addr, msg["clock"]) + RESET)
+                if rp_clock_value < self.replica_msg_proc:
+                    print(RED + "Duplicate message detected from {}: clock = {}".format(addr, rp_clock_value) + RESET)
                     continue
                 else:
                     self.replica_msg_proc += 1

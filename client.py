@@ -319,7 +319,7 @@ class Client():
         file_string = "{} {}"
         msg_count = 0
 
-        while(!self.is_logged_on):
+        while not self.is_logged_on:
             pass
 
         while True:

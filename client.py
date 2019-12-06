@@ -54,6 +54,7 @@ class Client():
         self.replica_sockets = multiprocessing.Manager().dict()
         self.replica_msg_proc = 0
         self.replica_msg_proc_mutex = threading.Lock()
+        self.login_lock = threading.Lock()
 
         print(GREEN + "Connecting to Replication Manager..." + RESET)
         self.connect_RM() # Connect only once
@@ -163,7 +164,10 @@ class Client():
 
             try:
                 # Send login message
+                # self.login_lock.acquire()
                 s.send(login_data.encode("utf-8"))
+
+
             except:
                 print(RED+"Connection with Replica {} closed unexpectedly".format(addr) + RESET)
                 os._exit()
@@ -251,6 +255,7 @@ class Client():
             if (msg["type"] == "login_success") and (msg["username"] == self.client_id) and (self.replica_msg_proc == 0):
                     self.replica_msg_proc = rp_clock_value + 1
                     self.is_logged_on = True
+                    # self.login_lock.release()
             else:
                 if rp_clock_value < self.replica_msg_proc:
                     print(RED + "Duplicate message detected from {}: clock = {}".format(addr, rp_clock_value) + RESET)
@@ -319,12 +324,15 @@ class Client():
         file_string = "{} {}"
         msg_count = 0
 
-        while not self.is_logged_on:
-            pass
+        # while not self.is_logged_on:
+        #     pass
 
         while True:
             while self.use_ai:
+                # self.login_lock.acquire()
                 # Create the message packet
+                t = random.random()
+                time.sleep(1.5 + t)
                 msg = {}
                 msg["type"] = "send_message"
                 msg["username"] = self.client_id
@@ -343,10 +351,10 @@ class Client():
 
                 self.rp_msg_counter += 1
 
-                t = random.random()
-                time.sleep(1.5 + t)
+                
 
                 msg_count += 1
+                # self.login_lock.release()
 
     def setup_chat_window(self):
         # Create a window

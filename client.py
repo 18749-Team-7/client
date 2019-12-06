@@ -41,6 +41,8 @@ class Client():
         self.rp_msg_counter = 1 # Counts how many messages have been sent to replica
         self.rm_msg_counter = 0
 
+        self.is_logged_on = False
+
         # Set AI flag
         self.use_ai = ai
 
@@ -248,6 +250,7 @@ class Client():
             # Check if its your login message, sync your clock to replicas
             if (msg["type"] == "login_success") and (msg["username"] == self.client_id) and (self.replica_msg_proc == 0):
                     self.replica_msg_proc = rp_clock_value + 1
+                    self.is_logged_on = True
             else:
                 if rp_clock_value < self.replica_msg_proc:
                     print(RED + "Duplicate message detected from {}: clock = {}".format(addr, rp_clock_value) + RESET)
@@ -315,6 +318,9 @@ class Client():
         len_lyric = len(lionel_ritchie)
         file_string = "{} {}"
         msg_count = 0
+
+        while(!self.is_logged_on):
+            pass
 
         while True:
             while self.use_ai:

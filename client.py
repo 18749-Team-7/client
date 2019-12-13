@@ -42,7 +42,7 @@ class Client():
         self.rm_msg_counter = 0
 
         self.is_logged_on = False
-
+        self.logged_in_flags = set()
         # Set AI flag
         self.use_ai = ai
 
@@ -166,6 +166,8 @@ class Client():
                 # Send login message
                 # self.login_lock.acquire()
                 s.send(login_data.encode("utf-8"))
+                time.sleep(1)
+                self.logged_in_flags.add(addr)
 
 
             except:
@@ -177,6 +179,7 @@ class Client():
         for addr in ip_list:
             self.replica_sockets[addr].close() # Close the socket
             del self.replica_sockets[addr]
+            self.logged_in_flags.remove(addr)
 
     def recv_replica_thread(self, s, addr):
         while True:
@@ -255,6 +258,7 @@ class Client():
             if (msg["type"] == "login_success") and (msg["username"] == self.client_id) and (self.replica_msg_proc == 0):
                     self.replica_msg_proc = rp_clock_value + 1
                     self.is_logged_on = True
+
                     # self.login_lock.release()
             else:
                 if rp_clock_value < self.replica_msg_proc:
@@ -344,7 +348,8 @@ class Client():
                 # Send message to every replica
                 for addr, s in self.replica_sockets.items():
                     try:
-                        s.send(data.encode("utf-8"))
+                        if addr in self.logged_in_flags:
+                            s.send(data.encode("utf-8"))
                         # print("Sent message")
                     except:
                         print(RED + "Error: Connection closed unexpectedly from Replica {}".format(addr) + RESET)

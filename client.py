@@ -338,6 +338,7 @@ class Client():
             while self.use_ai:
                 # self.login_lock.acquire()
                 # Create the message packet
+                random.seed(time.time())
                 t = random.random()
                 time.sleep(1.5 + t)
                 msg = {}

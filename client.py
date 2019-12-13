@@ -180,6 +180,9 @@ class Client():
             self.replica_sockets[addr].close() # Close the socket
             del self.replica_sockets[addr]
             self.logged_in_flags.remove(addr)
+        
+        if len(self.replica_sockets) == 0:
+            self.replica_msg_proc = 0
 
     def recv_replica_thread(self, s, addr):
         while True:
@@ -326,7 +329,7 @@ class Client():
         lionel_ritchie = lionel_ritchie.split()
         len_lyric = len(lionel_ritchie)
         file_string = "{} {}"
-        msg_count = 0
+        msg_count = 1
 
         # while not self.is_logged_on:
         #     pass

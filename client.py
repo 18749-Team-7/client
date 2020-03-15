@@ -204,11 +204,13 @@ class Client():
                 print(RED+"Unknown Error: Connection with Replica {} closed unexpectedly".format(addr) + RESET)
             if len(data) == 0:
                 continue
-
-            msg = json.loads(data.decode("utf-8"))
-            msg["ip"] = addr
-            msg["socket"] = s
-            self.queue.put(msg)
+            try:
+                msg = json.loads(data.decode("utf-8"))
+                msg["ip"] = addr
+                msg["socket"] = s
+                self.queue.put(msg)
+            except:
+                pass
 
             # Print Message received by replica
 
